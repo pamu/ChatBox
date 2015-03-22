@@ -236,7 +236,7 @@ _**StartClient**_
 
 Start ChatBox Actor
 
-sbt "runMain main.StartChatBox" //not the IP of the machine 
+sbt "runMain main.StartChatBox" //note the IP of the machine
 
 
 now Start Client Actor
