@@ -10,7 +10,7 @@ object Client {
   case class ReceiveMessage(from: String, message: String)
 }
 
-class Client(name: String) extends Actor with ActorLogging {
+class Client(name: String, ip: String) extends Actor with ActorLogging {
 
   import ChatBox._
   import Client._
@@ -18,7 +18,7 @@ class Client(name: String) extends Actor with ActorLogging {
   var chatBox: Option[ActorSelection] = None
 
   override def preStart(): Unit = {
-    chatBox = Some(context.actorSelection("akka.tcp://ChatSystem@127.0.0.1:2222/" +
+    chatBox = Some(context.actorSelection(s"akka.tcp://ChatSystem@$ip:2222/" +
       "user/ChatBox"))
 
     chatBox.map(actor => actor ! Register(name))

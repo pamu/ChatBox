@@ -129,7 +129,7 @@ _**Client.scala**_
       case class ReceiveMessage(from: String, message: String)
     }
     
-    class Client(name: String) extends Actor with ActorLogging {
+    class Client(name: String, ip: String) extends Actor with ActorLogging {
     
       import ChatBox._
       import Client._
@@ -137,7 +137,7 @@ _**Client.scala**_
       var chatBox: Option[ActorSelection] = None
     
       override def preStart(): Unit = {
-        chatBox = Some(context.actorSelection("akka.tcp://ChatSystem@ChatBoxActorIPAddress:2222/" +
+        chatBox = Some(context.actorSelection("akka.tcp://ChatSystem@$ip:2222/" +
           "user/ChatBox")) // node that chat box actor lookup is done using ChatBoxActor Running machine IP.
           //localhost if both ChatBoxActor and Client Actor are running on same machine.
     
@@ -202,6 +202,10 @@ _**StartClient**_
      */
     object StartClient {
       def main(args: Array[String]): Unit = {
+        if (args.isEmpty) {
+          println("Please provide IP of ChatBox Actor as the commandline argument")
+          System.exit(0)
+        }
         val config = ConfigFactory.load("client")
         val clientSystem = ActorSystem("ClientSystem", config)
         println("Enter your Nick Name:")
@@ -226,3 +230,15 @@ _**StartClient**_
     }
     
 ```
+
+
+## Usage
+
+Start ChatBox Actor
+
+sbt "runMain main.StartChatBox" //not the IP of the machine 
+
+
+now Start Client Actor
+
+sbt "runMain main.StartClient 127.0.0.1" // IP of the machine running chatbox actor

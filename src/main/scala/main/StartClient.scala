@@ -9,6 +9,10 @@ import com.typesafe.config.ConfigFactory
  */
 object StartClient {
   def main(args: Array[String]): Unit = {
+    if (args.isEmpty) {
+      println("Please provide IP of ChatBox Actor as the commandline argument")
+      System.exit(0)
+    }
     val config = ConfigFactory.load("client")
     val clientSystem = ActorSystem("ClientSystem", config)
     println("Enter your Nick Name:")
@@ -17,7 +21,7 @@ object StartClient {
       println("Enter your Nick Name:")
       name = Console.readLine.trim
     }
-    val client = clientSystem.actorOf(Props(new Client(name)), "Client")
+    val client = clientSystem.actorOf(Props(new Client(name, args(0))), "Client")
 
     println("Type message end with -> after -> type name of the person to send " +
       "and hit enter to send messages")
