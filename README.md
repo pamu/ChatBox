@@ -162,7 +162,7 @@ _**Client.scala**_
 
 ## Main
 
-_**Start ChatBox first on a Machine and Take the IP of the ChatBox to lookup ChatBox from Client**_
+_**Start ChatBox first on a Machine and use the IP of the ChatBox to lookup ChatBox from Client**_
 
 _**StartChatBox**_
 
