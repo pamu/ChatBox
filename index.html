@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <title>Chatbox by pamu</title>
+  </head>
+
+  <body>
+    <header>
+      <div class="inner">
+        <h1>Chatbox</h1>
+        <h2>Simple Chat System Using Akka Actors (Akka Remoting)</h2>
+        <a href="https://github.com/pamu/ChatBox" class="button"><small>View project on</small> GitHub</a>
+      </div>
+    </header>
+
+    <div id="content-wrapper">
+      <div class="inner clearfix">
+        <section id="main-content">
+          <h1>
+<a id="chatbox" class="anchor" href="#chatbox" aria-hidden="true"><span class="octicon octicon-link"></span></a>ChatBox</h1>
+
+<p>Simple Chat System Using Akka Actors (Akka Remoting)</p>
+
+<h2>
+<a id="chatbox-actor" class="anchor" href="#chatbox-actor" aria-hidden="true"><span class="octicon octicon-link"></span></a>ChatBox Actor</h2>
+
+<p>Manages the Client Actors and Client Actors register with the ChatBox Actor. The IP of the ChatBox actor is available to Client Actors. 
+ChatBox actor watches each Client actor that registers itself with it and removes them from the list of users once Client actors
+are unreachable.</p>
+
+<p><em><strong>Conf for ChatBoxActor</strong></em></p>
+
+<p>application.conf</p>
+
+<pre><code>
+    akka {
+      loglevel = "INFO"
+      actor {
+        provider = "akka.remote.RemoteActorRefProvider"
+      }
+      remote {
+        enabled-transports = ["akka.remote.netty.tcp"]
+        netty.tcp {
+          hostname = "127.0.0.1"
+          port = 2222
+        }
+        log-sent-messages = on
+        log-received-messages = on
+      }
+    }
+
+</code></pre>
+
+<p><em><strong>ChatBox.scala</strong></em></p>
+
+<div class="highlight highlight-scala"><pre>
+    <span class="pl-k">package</span> <span class="pl-en">actors</span>
+
+    <span class="pl-k">import</span> <span class="pl-v">akka.actor.</span>{<span class="pl-v">Terminated</span>, <span class="pl-v">ActorRef</span>, <span class="pl-v">ActorLogging</span>, <span class="pl-v">Actor</span>}
+
+<span class="pl-c">    /**</span>
+<span class="pl-c">     * Created by android on 21/3/15.</span>
+<span class="pl-c">     */</span>
+
+    <span class="pl-k">object</span> <span class="pl-en">ChatBox</span> {
+      <span class="pl-k">case</span> <span class="pl-k">class</span> <span class="pl-en">Register</span>(<span class="pl-v">name</span>: <span class="pl-k">String</span>)
+      <span class="pl-k">case</span> <span class="pl-k">class</span> <span class="pl-en">Message</span>(<span class="pl-v">from</span>: <span class="pl-k">String</span>, <span class="pl-v">to</span>: <span class="pl-k">String</span>, <span class="pl-v">body</span>: <span class="pl-k">String</span>)
+    }
+
+    <span class="pl-k">class</span> <span class="pl-en">ChatBox</span> <span class="pl-k">extends</span> <span class="pl-e">Actor</span> <span class="pl-k">with</span> <span class="pl-e">ActorLogging</span> {
+
+      <span class="pl-k">var</span> <span class="pl-en">clients</span> <span class="pl-k">=</span> <span class="pl-en">Map</span>.empty[<span class="pl-k">String</span>, <span class="pl-en">ActorRef</span>]
+
+      <span class="pl-k">import</span> <span class="pl-v">ChatBox.</span><span class="pl-v">_</span>
+      <span class="pl-k">import</span> <span class="pl-v">Client.</span><span class="pl-v">_</span>
+
+      <span class="pl-k">override</span> <span class="pl-k">def</span> <span class="pl-en">receive</span> <span class="pl-k">=</span> {
+        <span class="pl-k">case</span> <span class="pl-en">Register</span>(name) <span class="pl-k">=&gt;</span> {
+         <span class="pl-k">if</span> (<span class="pl-k">!</span> (clients contains name) ) {
+           clients <span class="pl-k">+</span><span class="pl-k">=</span> (name <span class="pl-k">-</span><span class="pl-k">&gt;</span> sender)
+           context watch sender
+           log.info(<span class="pl-s"><span class="pl-pds">"</span>Clients<span class="pl-pds">"</span></span>)
+           log.info(clients.mkString(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\n</span><span class="pl-pds">"</span></span>))
+         }
+        }
+
+        <span class="pl-k">case</span> <span class="pl-en">Message</span>(from, to, body) <span class="pl-k">=&gt;</span>
+          log.info(s<span class="pl-s"><span class="pl-pds">"</span>from: $from says: $body to: $to<span class="pl-pds">"</span></span>)
+          <span class="pl-k">if</span>(clients contains to) {
+            clients(to) <span class="pl-k">!</span> <span class="pl-en">ReceiveMessage</span>(from, body)
+          }<span class="pl-k">else</span> {
+            log.info(<span class="pl-s"><span class="pl-pds">"</span>message dropped<span class="pl-pds">"</span></span>)
+          }
+
+        <span class="pl-k">case</span> <span class="pl-en">Terminated</span>(actor) <span class="pl-k">=&gt;</span> {
+          clients <span class="pl-k">=</span> clients.filter(_._2 <span class="pl-k">!=</span> actor)
+        }
+        <span class="pl-k">case</span> _ <span class="pl-k">=&gt;</span> log.info(<span class="pl-s"><span class="pl-pds">"</span>unknown message<span class="pl-pds">"</span></span>)
+      }
+    }
+</pre></div>
+
+<h2>
+<a id="client-actor" class="anchor" href="#client-actor" aria-hidden="true"><span class="octicon octicon-link"></span></a>Client Actor</h2>
+
+<p>Each Client Actor represents the User and registers with the ChatBox Actor initially. Registration
+happens by first looking up the actor using <code>context.actorSelection("akka.tcp://ChatSystem@someip:port/user/ChatBox")</code>
+and then the Register message is sent by the client to the ChatBox actor thus registering with the chatbox actor.</p>
+
+<p><em><strong>Conf for ClientActor</strong></em></p>
+
+<p>client.conf</p>
+
+<pre><code>
+    akka {
+      loglevel = "INFO"
+      actor {
+        provider = "akka.remote.RemoteActorRefProvider"
+      }
+      remote {
+        enabled-transports = ["akka.remote.netty.tcp"]
+        netty.tcp {
+          hostname = "127.0.0.1"
+          port = 0
+        }
+        log-sent-messages = on
+        log-received-messages = on
+      }
+    }
+
+</code></pre>
+
+<p><em><strong>Client.scala</strong></em></p>
+
+<div class="highlight highlight-scala"><pre>
+    <span class="pl-k">package</span> <span class="pl-en">actors</span>
+
+    <span class="pl-k">import</span> <span class="pl-v">akka.actor.</span>{<span class="pl-v">ActorLogging</span>, <span class="pl-v">ActorSelection</span>, <span class="pl-v">Actor</span>}
+
+<span class="pl-c">    /**</span>
+<span class="pl-c">     * Created by android on 21/3/15.</span>
+<span class="pl-c">     */</span>
+    <span class="pl-k">object</span> <span class="pl-en">Client</span> {
+      <span class="pl-k">case</span> <span class="pl-k">class</span> <span class="pl-en">SendMessage</span>(<span class="pl-v">to</span>: <span class="pl-k">String</span>, <span class="pl-v">message</span>: <span class="pl-k">String</span>)
+      <span class="pl-k">case</span> <span class="pl-k">class</span> <span class="pl-en">ReceiveMessage</span>(<span class="pl-v">from</span>: <span class="pl-k">String</span>, <span class="pl-v">message</span>: <span class="pl-k">String</span>)
+    }
+
+    <span class="pl-k">class</span> <span class="pl-en">Client</span>(<span class="pl-v">name</span>: <span class="pl-k">String</span>, <span class="pl-v">ip</span>: <span class="pl-k">String</span>) <span class="pl-k">extends</span> <span class="pl-e">Actor</span> <span class="pl-k">with</span> <span class="pl-e">ActorLogging</span> {
+
+      <span class="pl-k">import</span> <span class="pl-v">ChatBox.</span><span class="pl-v">_</span>
+      <span class="pl-k">import</span> <span class="pl-v">Client.</span><span class="pl-v">_</span>
+
+      <span class="pl-k">var</span> <span class="pl-en">chatBox</span><span class="pl-k">:</span> <span class="pl-en">Option</span>[<span class="pl-en">ActorSelection</span>] <span class="pl-k">=</span> <span class="pl-c1">None</span>
+
+      <span class="pl-k">override</span> <span class="pl-k">def</span> <span class="pl-en">preStart</span>()<span class="pl-k">:</span> <span class="pl-k">Unit</span> <span class="pl-k">=</span> {
+        chatBox <span class="pl-k">=</span> <span class="pl-en">Some</span>(context.actorSelection(<span class="pl-s"><span class="pl-pds">"</span>akka.tcp://ChatSystem@$ip:2222/<span class="pl-pds">"</span></span> <span class="pl-k">+</span>
+          <span class="pl-s"><span class="pl-pds">"</span>user/ChatBox<span class="pl-pds">"</span></span>)) <span class="pl-c">// node that chat box actor lookup is done using ChatBoxActor Running machine IP.</span>
+          <span class="pl-c">//localhost if both ChatBoxActor and Client Actor are running on same machine.</span>
+
+        chatBox.map(actor <span class="pl-k">=&gt;</span> actor <span class="pl-k">!</span> <span class="pl-en">Register</span>(name))
+
+        chatBox.getOrElse({
+          println(<span class="pl-s"><span class="pl-pds">"</span>ChatBox unreachable, shutting down :(<span class="pl-pds">"</span></span>)
+          context.stop(<span class="pl-v">self</span>)
+        })
+      }
+
+      <span class="pl-k">override</span> <span class="pl-k">def</span> <span class="pl-en">receive</span> <span class="pl-k">=</span> {
+        <span class="pl-k">case</span> <span class="pl-en">SendMessage</span>(to, message) <span class="pl-k">=&gt;</span> chatBox.map(actor <span class="pl-k">=&gt;</span> actor <span class="pl-k">!</span> <span class="pl-en">Message</span>(name, to, message))
+        <span class="pl-k">case</span> <span class="pl-en">ReceiveMessage</span>(from, message) <span class="pl-k">=&gt;</span>
+          println(s<span class="pl-s"><span class="pl-pds">"</span>$from says: $message<span class="pl-pds">"</span></span>)
+        <span class="pl-k">case</span> _ <span class="pl-k">=&gt;</span> log.info(<span class="pl-s"><span class="pl-pds">"</span>unknown message<span class="pl-pds">"</span></span>)
+      }
+    }
+
+</pre></div>
+
+<h2>
+<a id="main" class="anchor" href="#main" aria-hidden="true"><span class="octicon octicon-link"></span></a>Main</h2>
+
+<p><em><strong>Start ChatBox first on a Machine and use the IP of the ChatBox to lookup ChatBox from Client</strong></em></p>
+
+<p><em><strong>StartChatBox</strong></em></p>
+
+<div class="highlight highlight-scala"><pre>
+    <span class="pl-k">package</span> <span class="pl-en">main</span>
+
+    <span class="pl-k">import</span> <span class="pl-v">actors.</span><span class="pl-v">ChatBox</span>
+    <span class="pl-k">import</span> <span class="pl-v">akka.actor.</span>{<span class="pl-v">Props</span>, <span class="pl-v">ActorSystem</span>}
+    <span class="pl-k">import</span> <span class="pl-v">com.typesafe.config.</span><span class="pl-v">ConfigFactory</span>
+
+<span class="pl-c">    /**</span>
+<span class="pl-c">     * Created by android on 21/3/15.</span>
+<span class="pl-c">     */</span>
+    <span class="pl-k">object</span> <span class="pl-en">StartChatBox</span> {
+      <span class="pl-k">def</span> <span class="pl-en">main</span>(<span class="pl-v">args</span>: <span class="pl-en">Array</span>[<span class="pl-k">String</span>])<span class="pl-k">:</span> <span class="pl-k">Unit</span> <span class="pl-k">=</span> {
+        <span class="pl-k">val</span> <span class="pl-en">config</span> <span class="pl-k">=</span> <span class="pl-en">ConfigFactory</span>.load()
+        <span class="pl-k">val</span> <span class="pl-en">chatSystem</span> <span class="pl-k">=</span> <span class="pl-en">ActorSystem</span>(<span class="pl-s"><span class="pl-pds">"</span>ChatSystem<span class="pl-pds">"</span></span>, config)
+        <span class="pl-k">val</span> <span class="pl-en">chatBox</span> <span class="pl-k">=</span> chatSystem.actorOf(<span class="pl-en">Props</span>[<span class="pl-en">ChatBox</span>], name <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>ChatBox<span class="pl-pds">"</span></span>)
+      }
+    }
+</pre></div>
+
+<p><em><strong>StartClient</strong></em></p>
+
+<div class="highlight highlight-scala"><pre>
+    <span class="pl-k">package</span> <span class="pl-en">main</span>
+
+    <span class="pl-k">import</span> <span class="pl-v">actors.</span><span class="pl-v">Client</span>
+    <span class="pl-k">import</span> <span class="pl-v">akka.actor.</span>{<span class="pl-v">Props</span>, <span class="pl-v">ActorSystem</span>}
+    <span class="pl-k">import</span> <span class="pl-v">com.typesafe.config.</span><span class="pl-v">ConfigFactory</span>
+
+<span class="pl-c">    /**</span>
+<span class="pl-c">     * Created by android on 21/3/15.</span>
+<span class="pl-c">     */</span>
+    <span class="pl-k">object</span> <span class="pl-en">StartClient</span> {
+      <span class="pl-k">def</span> <span class="pl-en">main</span>(<span class="pl-v">args</span>: <span class="pl-en">Array</span>[<span class="pl-k">String</span>])<span class="pl-k">:</span> <span class="pl-k">Unit</span> <span class="pl-k">=</span> {
+        <span class="pl-k">if</span> (args.isEmpty) {
+          println(<span class="pl-s"><span class="pl-pds">"</span>Please provide IP of ChatBox Actor as the commandline argument<span class="pl-pds">"</span></span>)
+          <span class="pl-en">System</span>.exit(<span class="pl-c1">0</span>)
+        }
+        <span class="pl-k">val</span> <span class="pl-en">config</span> <span class="pl-k">=</span> <span class="pl-en">ConfigFactory</span>.load(<span class="pl-s"><span class="pl-pds">"</span>client<span class="pl-pds">"</span></span>)
+        <span class="pl-k">val</span> <span class="pl-en">clientSystem</span> <span class="pl-k">=</span> <span class="pl-en">ActorSystem</span>(<span class="pl-s"><span class="pl-pds">"</span>ClientSystem<span class="pl-pds">"</span></span>, config)
+        println(<span class="pl-s"><span class="pl-pds">"</span>Enter your Nick Name:<span class="pl-pds">"</span></span>)
+        <span class="pl-k">var</span> <span class="pl-en">name</span> <span class="pl-k">=</span> <span class="pl-en">Console</span>.readLine.trim
+        <span class="pl-k">while</span> (name <span class="pl-k">==</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span>) {
+          println(<span class="pl-s"><span class="pl-pds">"</span>Enter your Nick Name:<span class="pl-pds">"</span></span>)
+          name <span class="pl-k">=</span> <span class="pl-en">Console</span>.readLine.trim
+        }
+        <span class="pl-k">val</span> <span class="pl-en">client</span> <span class="pl-k">=</span> clientSystem.actorOf(<span class="pl-en">Props</span>(<span class="pl-k">new</span> <span class="pl-en">Client</span>(name)), <span class="pl-s"><span class="pl-pds">"</span>Client<span class="pl-pds">"</span></span>)
+
+        println(<span class="pl-s"><span class="pl-pds">"</span>Type message end with -&gt; after -&gt; type name of the person to send <span class="pl-pds">"</span></span> <span class="pl-k">+</span>
+          <span class="pl-s"><span class="pl-pds">"</span>and hit enter to send messages<span class="pl-pds">"</span></span>)
+
+        <span class="pl-k">while</span> (<span class="pl-c1">true</span>) {
+          <span class="pl-k">val</span> <span class="pl-en">line</span> <span class="pl-k">=</span> <span class="pl-en">Console</span>.readLine.trim
+          <span class="pl-k">if</span> (line <span class="pl-k">!=</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span> <span class="pl-k">&amp;&amp;</span> line.contains(<span class="pl-s"><span class="pl-pds">"</span>-&gt;<span class="pl-pds">"</span></span>) <span class="pl-k">&amp;&amp;</span> line.split(<span class="pl-s"><span class="pl-pds">"</span>-&gt;<span class="pl-pds">"</span></span>).size <span class="pl-k">==</span> <span class="pl-c1">2</span>) {
+            <span class="pl-k">val</span> <span class="pl-en">texts</span> <span class="pl-k">=</span> line.split(<span class="pl-s"><span class="pl-pds">"</span>-&gt;<span class="pl-pds">"</span></span>)
+            client <span class="pl-k">!</span> <span class="pl-en">Client</span>.<span class="pl-en">SendMessage</span>(texts(<span class="pl-c1">1</span>).trim, texts(<span class="pl-c1">0</span>).trim)
+          }
+        }
+      }
+    }
+</pre></div>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>Start ChatBox Actor</p>
+
+<p><code>sbt "runMain main.StartChatBox" //note the IP of the machine</code></p>
+
+<p>now Start Client Actor</p>
+
+<p><code>sbt "runMain main.StartClient 127.0.0.1" // IP of the machine running chatbox actor</code></p>
+        </section>
+
+        <aside id="sidebar">
+          <a href="https://github.com/pamu/ChatBox/zipball/master" class="button">
+            <small>Download</small>
+            .zip file
+          </a>
+          <a href="https://github.com/pamu/ChatBox/tarball/master" class="button">
+            <small>Download</small>
+            .tar.gz file
+          </a>
+
+          <p class="repo-owner"><a href="https://github.com/pamu/ChatBox"></a> is maintained by <a href="https://github.com/pamu">pamu</a>.</p>
+
+          <p>This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</p>
+        </aside>
+      </div>
+    </div>
+
+  
+  </body>
+</html>
